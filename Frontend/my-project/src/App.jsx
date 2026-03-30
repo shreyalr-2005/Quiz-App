@@ -1,46 +1,49 @@
-import { useState, useEffect } from 'react'
-import Quiz from './components/Quiz'
-import './index.css'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { useState } from 'react'
+import LandingPage from './pages/LandingPage'
+import LoginPage from './pages/LoginPage'
+import SignupPage from './pages/SignupPage'
+import HomePage from './pages/HomePage'
+import QuizPage from './pages/QuizPage'
+
+function AnimatedBg() {
+  return (
+    <div className="animated-bg">
+      <div className="orb"></div>
+      <div className="orb"></div>
+      <div className="orb"></div>
+    </div>
+  )
+}
 
 function App() {
-  const [questions, setQuestions] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [started, setStarted] = useState(false)
+  const [user, setUser] = useState(null)
 
-  const fetchQuestions = async () => {
-    try {
-      setLoading(true)
-      const res = await fetch('http://localhost:8000/api/questions')
-      if (!res.ok) throw new Error('Failed to fetch questions')
-      const data = await res.json()
-      setQuestions(data)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+  const handleLogin = (userData) => {
+    setUser(userData)
   }
 
-  useEffect(() => {
-    fetchQuestions()
-  }, [])
-
-  if (loading) return <div className="quiz-container">Loading... Ensure the FastAPI backend is running on port 8000!</div>
-  if (error) return <div className="quiz-container">Error: {error}</div>
+  const handleLogout = () => {
+    setUser(null)
+  }
 
   return (
-    <div className="quiz-container">
-      {!started ? (
-        <div style={{ textAlign: 'center' }}>
-          <h1>W3Schools Style Quiz</h1>
-          <p>Test your web development skills!</p>
-          <button className="btn" onClick={() => setStarted(true)}>Start Quiz</button>
-        </div>
-      ) : (
-        <Quiz questions={questions} onRestart={() => setStarted(false)} />
-      )}
-    </div>
+    <>
+      <AnimatedBg />
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route
+          path="/home"
+          element={user ? <HomePage user={user} onLogout={handleLogout} /> : <Navigate to="/login" />}
+        />
+        <Route 
+          path="/quiz/:category"
+          element={user ? <QuizPage user={user} /> : <Navigate to="/login" />}
+        />
+      </Routes>
+    </>
   )
 }
 
