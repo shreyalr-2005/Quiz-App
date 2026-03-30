@@ -20,22 +20,41 @@ export default function HomePage({ user, onLogout }) {
   return (
     <div className="home-page">
       <div className="home-header">
-        <h1>QuizMaster</h1>
+        <h1>🏆 QuizMaster</h1>
         <div className="user-info">
-          <div className="avatar">{user.name?.charAt(0).toUpperCase()}</div>
-          <span>{user.name}</span>
-          <button className="btn-logout" onClick={handleLogout}>Logout</button>
+          <Link to="/leaderboard" className="btn-outline" style={{ padding: '8px 20px', fontSize: '0.85rem' }}>📊 Scoreboard</Link>
+          {user ? (
+            <>
+              <div className="avatar">{user.name?.charAt(0).toUpperCase()}</div>
+              <span>{user.name}</span>
+              <button className="btn-logout" onClick={handleLogout}>Logout</button>
+            </>
+          ) : (
+            <>
+              <Link to="/login" className="btn-primary" style={{ padding: '8px 24px', fontSize: '0.9rem' }}>Login</Link>
+              <Link to="/signup" className="btn-outline" style={{ padding: '8px 24px', fontSize: '0.9rem' }}>Sign Up</Link>
+            </>
+          )}
         </div>
       </div>
 
       <div className="welcome-text">
         <h2>Choose a Category</h2>
-        <p>Select a topic below and test your knowledge with 5 challenging questions</p>
+        <p>
+          {user 
+            ? `Welcome back, ${user.name}! Pick a topic and test your knowledge.`
+            : 'Browse our courses below. Login to start a quiz!'}
+        </p>
       </div>
 
       <div className="categories-grid">
         {categories.map(cat => (
-          <Link to={`/quiz/${cat.id}`} key={cat.id} className="category-card glass-card" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <Link
+            to={user ? `/quiz/${cat.id}` : '/login'}
+            key={cat.id}
+            className="category-card glass-card"
+            style={{ textDecoration: 'none', color: 'inherit' }}
+          >
             <div className="category-icon">{cat.icon}</div>
             <h3>{cat.name}</h3>
             <p>{cat.description}</p>
@@ -46,6 +65,15 @@ export default function HomePage({ user, onLogout }) {
             }}>
               {cat.questionCount} Questions
             </span>
+            {!user && (
+              <span style={{
+                display: 'block',
+                marginTop: '10px',
+                fontSize: '0.8rem',
+                color: 'var(--text-secondary)',
+                fontStyle: 'italic'
+              }}>🔒 Login to attempt</span>
+            )}
           </Link>
         ))}
       </div>

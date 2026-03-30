@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 
-export default function QuizPage() {
+export default function QuizPage({ user }) {
   const { category } = useParams()
-  const navigate = useNavigate()
   const [questions, setQuestions] = useState([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState({})
@@ -34,7 +33,11 @@ export default function QuizPage() {
       const res = await fetch('http://localhost:8000/api/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers })
+        body: JSON.stringify({
+          answers,
+          category,
+          username: user?.username || null
+        })
       })
       const data = await res.json()
       setResults(data)
@@ -46,8 +49,9 @@ export default function QuizPage() {
   // ── Results Screen ──
   if (results) {
     const pct = Math.round((results.score / results.total) * 100)
-    let message = 'Keep practicing!'
-    if (pct >= 80) message = 'Excellent work! 🎉'
+    let message = 'Keep practicing! 📚'
+    if (pct === 100) message = 'Perfect score! You\'re a genius! 🏆'
+    else if (pct >= 80) message = 'Excellent work! 🎉'
     else if (pct >= 60) message = 'Good job! Keep it up! 👍'
     else if (pct >= 40) message = 'Not bad, room for improvement!'
 
@@ -75,7 +79,7 @@ export default function QuizPage() {
           </div>
 
           <div className="results-buttons">
-            <Link to="/home" className="btn-primary">Back to Home</Link>
+            <Link to="/" className="btn-primary">Back to Home</Link>
             <button className="btn-outline" onClick={() => {
               setAnswers({})
               setCurrentIndex(0)
@@ -91,6 +95,11 @@ export default function QuizPage() {
   return (
     <div className="quiz-page">
       <div className="quiz-card glass-card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <Link to="/" className="btn-outline" style={{ padding: '6px 16px', fontSize: '0.85rem' }}>← Back</Link>
+          <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{category}</span>
+        </div>
+
         <div className="quiz-progress">
           <span>Q{currentIndex + 1}</span>
           <div className="progress-bar">
