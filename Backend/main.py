@@ -1,99 +1,153 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Dict, List
+from typing import Optional
+import uuid
 
-app = FastAPI()
+from database import get_connection, init_db
+from models import SignupRequest, LoginRequest, AnswerSubmission
+from questions import get_categories, get_questions_by_category, get_question_by_id
+
+app = FastAPI(title="QuizMaster API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins for development
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Mock Quiz Database
-quiz_questions = [
-    {
-        "id": 1,
-        "text": "What does HTML stand for?",
-        "options": [
-            "Hyper Text Markup Language",
-            "Home Tool Markup Language",
-            "Hyperlinks and Text Markup Language",
-            "Hyper Tool Mouse Language"
-        ],
-        "correct_answer": "Hyper Text Markup Language"
-    },
-    {
-        "id": 2,
-        "text": "Choose the correct HTML element for the largest heading:",
-        "options": ["<heading>", "<h1>", "<h6>", "<head>"],
-        "correct_answer": "<h1>"
-    },
-    {
-        "id": 3,
-        "text": "What does CSS stand for?",
-        "options": [
-            "Computer Style Sheets",
-            "Colorful Style Sheets",
-            "Cascading Style Sheets",
-            "Creative Style Sheets"
-        ],
-        "correct_answer": "Cascading Style Sheets"
-    },
-    {
-        "id": 4,
-        "text": "Inside which HTML element do we put the JavaScript?",
-        "options": ["<js>", "<scripting>", "<script>", "<javascript>"],
-        "correct_answer": "<script>"
-    },
-    {
-        "id": 5,
-        "text": "Which property is used to change the background color?",
-        "options": ["bgcolor", "color", "background-color", "bg-color"],
-        "correct_answer": "background-color"
-    }
-]
+# Ensure DB is initialized
+init_db()
 
-class AnswerSubmission(BaseModel):
-    answers: Dict[int, str]
+# ─── Auth Endpoints ───
+
+@app.post("/api/signup")
+def signup(req: SignupRequest):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("INSERT INTO users (name, username, password) VALUES (?, ?, ?)",
+                       (req.name, req.username, req.password))
+        conn.commit()
+    except Exception:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Username already exists")
+    conn.close()
+    return {"message": "Account created successfully"}
+
+@app.post("/api/login")
+def login(req: LoginRequest):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE username = ?", (req.username,))
+    user = cursor.fetchone()
+    conn.close()
+    if not user or user["password"] != req.password:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    token = str(uuid.uuid4())
+    return {"token": token, "name": user["name"], "username": user["username"]}
+
+# ─── Quiz Endpoints ───
+
+@app.get("/api/categories")
+def list_categories():
+    return get_categories()
 
 @app.get("/api/questions")
-def get_questions():
-    # Return questions without correct answers to prevent cheating on frontend
-    questions_without_answers = []
-    for q in quiz_questions:
-        questions_without_answers.append({
-            "id": q["id"],
-            "text": q["text"],
-            "options": q["options"]
-        })
-    return questions_without_answers
+def list_questions(category: Optional[str] = None):
+    return get_questions_by_category(category)
 
 @app.post("/api/submit")
 def submit_quiz(submission: AnswerSubmission):
     score = 0
     results = []
-    
-    for q in quiz_questions:
-        q_id = q["id"]
-        user_answer = submission.answers.get(q_id)
+    for q_id_str, user_answer in submission.answers.items():
+        q_id = int(q_id_str) if isinstance(q_id_str, str) else q_id_str
+        q = get_question_by_id(q_id)
+        if not q:
+            continue
         is_correct = user_answer == q["correct_answer"]
-        
         if is_correct:
             score += 1
-            
         results.append({
             "id": q_id,
             "is_correct": is_correct,
-            "correct_answer": q["correct_answer"], # Send back the correct answer for review
+            "correct_answer": q["correct_answer"],
             "user_answer": user_answer
         })
-        
-    return {
-        "score": score,
-        "total": len(quiz_questions),
-        "results": results
-    }
+
+    # Save score to database if username and category provided
+    if submission.username and submission.category:
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            total = len(results)
+            percentage = (score / total * 100) if total > 0 else 0
+            cursor.execute(
+                "INSERT INTO scores (username, category, score, total, percentage) VALUES (?, ?, ?, ?, ?)",
+                (submission.username, submission.category, score, total, percentage)
+            )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Error saving score: {e}")
+
+    return {"score": score, "total": len(results), "results": results}
+
+# ─── Score History ───
+
+@app.get("/api/scores/{username}")
+def get_scores(username: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM scores WHERE username = ? ORDER BY taken_at DESC", (username,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+# ─── Users List ───
+
+@app.get("/api/users")
+def list_users():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT 
+            u.username,
+            u.name,
+            u.created_at,
+            COUNT(s.id) AS quizzes_taken,
+            COALESCE(ROUND(AVG(s.percentage), 1), 0) AS avg_score
+        FROM users u
+        LEFT JOIN scores s ON u.username = s.username
+        GROUP BY u.username
+        ORDER BY u.created_at DESC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+# ─── Leaderboard ───
+
+@app.get("/api/leaderboard")
+def leaderboard():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT 
+            u.name,
+            u.username,
+            COUNT(s.id) AS quizzes_taken,
+            SUM(s.score) AS total_correct,
+            SUM(s.total) AS total_questions,
+            ROUND(AVG(s.percentage), 1) AS avg_percentage,
+            MAX(s.percentage) AS best_score
+        FROM users u
+        INNER JOIN scores s ON u.username = s.username
+        GROUP BY u.username
+        ORDER BY avg_percentage DESC, total_correct DESC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
