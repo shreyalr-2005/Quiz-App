@@ -6,6 +6,7 @@ import uuid
 from database import get_connection, init_db
 from models import SignupRequest, LoginRequest, AnswerSubmission
 from questions import get_categories, get_questions_by_category, get_question_by_id, get_course_info
+from learning_content import get_learning_content
 
 app = FastAPI(title="QuizMaster API")
 
@@ -59,6 +60,38 @@ def course_info(category_id: str):
     if not info:
         raise HTTPException(status_code=404, detail="Course not found")
     return info
+
+@app.get("/api/learn/{category_id}")
+def learn_course(category_id: str):
+    content = get_learning_content(category_id)
+    if not content:
+        raise HTTPException(status_code=404, detail="Learning content not found")
+    return content
+
+@app.get("/api/progress/{username}/{category}")
+def user_progress(username: str, category: str):
+    """Returns which difficulties the user has passed (>=60%) for this category"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT difficulty, MAX(percentage) as best_score
+        FROM scores
+        WHERE username = ? AND category = ? AND difficulty IN ('easy', 'medium', 'hard')
+        GROUP BY difficulty
+    """, (username, category))
+    rows = cursor.fetchall()
+    conn.close()
+    passed = {}
+    for row in rows:
+        passed[row["difficulty"]] = {"best_score": row["best_score"], "passed": row["best_score"] >= 60}
+    # Determine unlocked levels
+    easy_passed = passed.get("easy", {}).get("passed", False)
+    medium_passed = passed.get("medium", {}).get("passed", False)
+    return {
+        "easy": {"unlocked": True, **passed.get("easy", {"best_score": 0, "passed": False})},
+        "medium": {"unlocked": easy_passed, **passed.get("medium", {"best_score": 0, "passed": False})},
+        "hard": {"unlocked": medium_passed, **passed.get("hard", {"best_score": 0, "passed": False})}
+    }
 
 @app.get("/api/questions")
 def list_questions(category: Optional[str] = None, difficulty: Optional[str] = None):
