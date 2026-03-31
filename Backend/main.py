@@ -5,7 +5,7 @@ import uuid
 
 from database import get_connection, init_db
 from models import SignupRequest, LoginRequest, AnswerSubmission
-from questions import get_categories, get_questions_by_category, get_question_by_id
+from questions import get_categories, get_questions_by_category, get_question_by_id, get_course_info
 
 app = FastAPI(title="QuizMaster API")
 
@@ -17,10 +17,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Ensure DB is initialized
 init_db()
 
-# ─── Auth Endpoints ───
+# ─── Auth ───
 
 @app.post("/api/signup")
 def signup(req: SignupRequest):
@@ -48,15 +47,22 @@ def login(req: LoginRequest):
     token = str(uuid.uuid4())
     return {"token": token, "name": user["name"], "username": user["username"]}
 
-# ─── Quiz Endpoints ───
+# ─── Quiz ───
 
 @app.get("/api/categories")
 def list_categories():
     return get_categories()
 
+@app.get("/api/course/{category_id}")
+def course_info(category_id: str):
+    info = get_course_info(category_id)
+    if not info:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return info
+
 @app.get("/api/questions")
-def list_questions(category: Optional[str] = None):
-    return get_questions_by_category(category)
+def list_questions(category: Optional[str] = None, difficulty: Optional[str] = None):
+    return get_questions_by_category(category, difficulty)
 
 @app.post("/api/submit")
 def submit_quiz(submission: AnswerSubmission):
@@ -74,10 +80,10 @@ def submit_quiz(submission: AnswerSubmission):
             "id": q_id,
             "is_correct": is_correct,
             "correct_answer": q["correct_answer"],
-            "user_answer": user_answer
+            "user_answer": user_answer,
+            "explanation": q.get("explanation", "")
         })
 
-    # Save score to database if username and category provided
     if submission.username and submission.category:
         try:
             conn = get_connection()
@@ -85,8 +91,8 @@ def submit_quiz(submission: AnswerSubmission):
             total = len(results)
             percentage = (score / total * 100) if total > 0 else 0
             cursor.execute(
-                "INSERT INTO scores (username, category, score, total, percentage) VALUES (?, ?, ?, ?, ?)",
-                (submission.username, submission.category, score, total, percentage)
+                "INSERT INTO scores (username, category, score, total, percentage, difficulty) VALUES (?, ?, ?, ?, ?, ?)",
+                (submission.username, submission.category, score, total, percentage, submission.difficulty or "mixed")
             )
             conn.commit()
             conn.close()
@@ -95,7 +101,7 @@ def submit_quiz(submission: AnswerSubmission):
 
     return {"score": score, "total": len(results), "results": results}
 
-# ─── Score History ───
+# ─── Scores ───
 
 @app.get("/api/scores/{username}")
 def get_scores(username: str):
@@ -106,45 +112,33 @@ def get_scores(username: str):
     conn.close()
     return [dict(row) for row in rows]
 
-# ─── Users List ───
-
 @app.get("/api/users")
 def list_users():
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT 
-            u.username,
-            u.name,
-            u.created_at,
+        SELECT u.username, u.name, u.created_at,
             COUNT(s.id) AS quizzes_taken,
             COALESCE(ROUND(AVG(s.percentage), 1), 0) AS avg_score
-        FROM users u
-        LEFT JOIN scores s ON u.username = s.username
-        GROUP BY u.username
-        ORDER BY u.created_at DESC
+        FROM users u LEFT JOIN scores s ON u.username = s.username
+        GROUP BY u.username ORDER BY u.created_at DESC
     """)
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
-
-# ─── Leaderboard ───
 
 @app.get("/api/leaderboard")
 def leaderboard():
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT 
-            u.name,
-            u.username,
+        SELECT u.name, u.username,
             COUNT(s.id) AS quizzes_taken,
             SUM(s.score) AS total_correct,
             SUM(s.total) AS total_questions,
             ROUND(AVG(s.percentage), 1) AS avg_percentage,
             MAX(s.percentage) AS best_score
-        FROM users u
-        INNER JOIN scores s ON u.username = s.username
+        FROM users u INNER JOIN scores s ON u.username = s.username
         GROUP BY u.username
         ORDER BY avg_percentage DESC, total_correct DESC
     """)

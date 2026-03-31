@@ -30,10 +30,17 @@ def init_db():
             score INTEGER NOT NULL,
             total INTEGER NOT NULL,
             percentage REAL NOT NULL,
+            difficulty TEXT DEFAULT 'mixed',
             taken_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (username) REFERENCES users(username)
         )
     """)
+    
+    # Migration: add difficulty column if it doesn't exist
+    try:
+        cursor.execute("ALTER TABLE scores ADD COLUMN difficulty TEXT DEFAULT 'mixed'")
+    except Exception:
+        pass  # Column already exists
     
     conn.commit()
     conn.close()

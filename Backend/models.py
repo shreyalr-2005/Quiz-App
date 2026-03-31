@@ -14,3 +14,4 @@ class AnswerSubmission(BaseModel):
     answers: Dict[int, str]
     category: Optional[str] = None
     username: Optional[str] = None
+    difficulty: Optional[str] = None
