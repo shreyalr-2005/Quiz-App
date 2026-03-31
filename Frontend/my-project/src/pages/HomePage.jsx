@@ -39,10 +39,10 @@ export default function HomePage({ user, onLogout }) {
       </div>
 
       <div className="welcome-text">
-        <h2>Choose a Category</h2>
+        <h2>Explore Our Courses</h2>
         <p>
           {user 
-            ? `Welcome back, ${user.name}! Pick a topic and test your knowledge.`
+            ? `Welcome back, ${user.name}! Pick a course, choose your difficulty, and test your knowledge.`
             : 'Browse our courses below. Login to start a quiz!'}
         </p>
       </div>
@@ -50,7 +50,7 @@ export default function HomePage({ user, onLogout }) {
       <div className="categories-grid">
         {categories.map(cat => (
           <Link
-            to={user ? `/quiz/${cat.id}` : '/login'}
+            to={`/course/${cat.id}`}
             key={cat.id}
             className="category-card glass-card"
             style={{ textDecoration: 'none', color: 'inherit' }}
@@ -58,22 +58,20 @@ export default function HomePage({ user, onLogout }) {
             <div className="category-icon">{cat.icon}</div>
             <h3>{cat.name}</h3>
             <p>{cat.description}</p>
-            <span className="category-badge" style={{
-              background: `${cat.color}22`,
-              color: cat.color,
-              border: `1px solid ${cat.color}44`
-            }}>
-              {cat.questionCount} Questions
-            </span>
-            {!user && (
-              <span style={{
-                display: 'block',
-                marginTop: '10px',
-                fontSize: '0.8rem',
-                color: 'var(--text-secondary)',
-                fontStyle: 'italic'
-              }}>🔒 Login to attempt</span>
-            )}
+            <div className="card-bottom-row">
+              <span className="category-badge" style={{
+                background: `${cat.color}22`,
+                color: cat.color,
+                border: `1px solid ${cat.color}44`
+              }}>
+                {cat.questionCount} Questions
+              </span>
+              <span className="difficulty-dots">
+                <span className="dot dot-easy" title="Easy">🟢 {cat.easyCt}</span>
+                <span className="dot dot-med" title="Medium">🟡 {cat.mediumCt}</span>
+                <span className="dot dot-hard" title="Hard">🔴 {cat.hardCt}</span>
+              </span>
+            </div>
           </Link>
         ))}
       </div>

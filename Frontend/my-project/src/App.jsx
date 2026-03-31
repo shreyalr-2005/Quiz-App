@@ -6,6 +6,7 @@ import SignupPage from './pages/SignupPage'
 import HomePage from './pages/HomePage'
 import QuizPage from './pages/QuizPage'
 import LeaderboardPage from './pages/LeaderboardPage'
+import CourseInfoPage from './pages/CourseInfoPage'
 
 function AnimatedBg() {
   return (
@@ -36,10 +37,13 @@ function App() {
         <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/leaderboard" element={<LeaderboardPage />} />
+        <Route path="/course/:category" element={<CourseInfoPage user={user} />} />
         <Route 
-          path="/quiz/:category"
+          path="/quiz/:category/:difficulty"
           element={user ? <QuizPage user={user} /> : <Navigate to="/login" />}
         />
+        {/* Legacy route redirect */}
+        <Route path="/quiz/:category" element={<Navigate to="/" />} />
       </Routes>
     </>
   )
